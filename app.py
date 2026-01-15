@@ -5,7 +5,12 @@ import streamlit as st
 from datetime import datetime
 
 # Import our modules
-from data import PORTFOLIO, USERS, format_currency, get_total_portfolio_value
+from data import (
+    DEFAULT_PORTFOLIO, USERS, ASSET_TYPES, 
+    format_currency, get_total_portfolio_value, 
+    add_asset, update_asset, delete_asset
+)
+import copy
 from services import (
     generate_mission_statement,
     generate_heir_content,
@@ -109,6 +114,17 @@ def initialize_session_state():
     
     if 'heir_content_cache' not in st.session_state:
         st.session_state.heir_content_cache = {}
+    
+    # Initialize portfolio from default if not set
+    if 'portfolio' not in st.session_state:
+        st.session_state.portfolio = copy.deepcopy(DEFAULT_PORTFOLIO)
+    
+    # Asset management state
+    if 'editing_asset_id' not in st.session_state:
+        st.session_state.editing_asset_id = None
+    
+    if 'show_add_asset' not in st.session_state:
+        st.session_state.show_add_asset = False
 
 
 def primary_client_view():
@@ -117,16 +133,130 @@ def primary_client_view():
     
     st.markdown("---")
     
+    # Get portfolio from session state
+    portfolio = st.session_state.portfolio
+    
     # Portfolio Overview
     st.markdown("### 💰 Portfolio Overview")
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric("Total Portfolio Value", format_currency(get_total_portfolio_value()))
+        st.metric("Total Portfolio Value", format_currency(get_total_portfolio_value(portfolio)))
     with col2:
-        st.metric("Asset Classes", len(set(a['type'] for a in PORTFOLIO)))
+        st.metric("Asset Classes", len(set(a['type'] for a in portfolio)))
     with col3:
-        st.metric("Total Holdings", len(PORTFOLIO))
+        st.metric("Total Holdings", len(portfolio))
+    
+    st.markdown("---")
+    
+    # Asset Management Section
+    st.markdown("## 🏦 Portfolio Management")
+    st.markdown("*Add, edit, or remove assets from your family portfolio.*")
+    
+    # Add Asset Button
+    col_add, col_spacer = st.columns([1, 4])
+    with col_add:
+        if st.button("➕ Add New Asset", use_container_width=True):
+            st.session_state.show_add_asset = True
+            st.session_state.editing_asset_id = None
+    
+    # Add Asset Form
+    if st.session_state.show_add_asset:
+        with st.expander("📝 Add New Asset", expanded=True):
+            with st.form("add_asset_form"):
+                st.markdown("#### New Asset Details")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    new_name = st.text_input("Asset Name*", placeholder="e.g., Tesla Inc")
+                    new_value = st.number_input("Value ($)*", min_value=0, value=100000, step=10000)
+                with col2:
+                    new_type = st.selectbox("Asset Type*", ASSET_TYPES)
+                    new_symbol = st.text_input("Symbol (optional)", placeholder="e.g., TSLA")
+                
+                new_description = st.text_area("Description", placeholder="Brief description of this asset...")
+                
+                col_submit, col_cancel = st.columns(2)
+                with col_submit:
+                    submit = st.form_submit_button("✅ Add Asset", use_container_width=True)
+                with col_cancel:
+                    cancel = st.form_submit_button("❌ Cancel", use_container_width=True)
+                
+                if submit and new_name:
+                    add_asset(portfolio, new_name, new_value, new_type, new_symbol, new_description)
+                    st.session_state.show_add_asset = False
+                    st.session_state.heir_content_cache = {}  # Clear cache for new asset
+                    st.success(f"✅ Added {new_name} to portfolio!")
+                    st.rerun()
+                elif cancel:
+                    st.session_state.show_add_asset = False
+                    st.rerun()
+    
+    # Display Assets with Edit/Delete
+    st.markdown("### Current Holdings")
+    
+    for asset in portfolio:
+        asset_id = asset.get('id', 0)
+        
+        with st.container():
+            # Asset display row
+            col_info, col_value, col_actions = st.columns([3, 2, 2])
+            
+            with col_info:
+                type_emoji = {'Equities': '📈', 'Index Fund': '📊', 'Bonds': '💵', 'Real Estate': '🏠', 
+                             'Cryptocurrency': '🪙', 'Private Equity': '🏢', 'Cash/Savings': '💰', 'Alternative Investments': '💎'}
+                emoji = type_emoji.get(asset['type'], '📦')
+                st.markdown(f"**{emoji} {asset['name']}**")
+                st.caption(f"{asset['type']} {f'({asset.get("symbol", "")})' if asset.get('symbol') else ''}")
+            
+            with col_value:
+                st.markdown(f"### {format_currency(asset['value'])}")
+            
+            with col_actions:
+                col_edit, col_delete = st.columns(2)
+                with col_edit:
+                    if st.button("✏️", key=f"edit_{asset_id}", help="Edit asset"):
+                        st.session_state.editing_asset_id = asset_id
+                        st.session_state.show_add_asset = False
+                with col_delete:
+                    if st.button("🗑️", key=f"delete_{asset_id}", help="Delete asset"):
+                        delete_asset(portfolio, asset_id)
+                        st.session_state.heir_content_cache = {}
+                        st.success(f"Deleted {asset['name']}")
+                        st.rerun()
+        
+        # Edit Form (inline)
+        if st.session_state.editing_asset_id == asset_id:
+            with st.form(f"edit_form_{asset_id}"):
+                st.markdown("#### Edit Asset")
+                col1, col2 = st.columns(2)
+                with col1:
+                    edit_name = st.text_input("Name", value=asset['name'])
+                    edit_value = st.number_input("Value ($)", value=asset['value'], min_value=0, step=10000)
+                with col2:
+                    type_index = ASSET_TYPES.index(asset['type']) if asset['type'] in ASSET_TYPES else 0
+                    edit_type = st.selectbox("Type", ASSET_TYPES, index=type_index)
+                    edit_symbol = st.text_input("Symbol", value=asset.get('symbol', ''))
+                
+                edit_description = st.text_area("Description", value=asset.get('description', ''))
+                
+                col_save, col_cancel = st.columns(2)
+                with col_save:
+                    save = st.form_submit_button("💾 Save", use_container_width=True)
+                with col_cancel:
+                    cancel_edit = st.form_submit_button("❌ Cancel", use_container_width=True)
+                
+                if save:
+                    update_asset(portfolio, asset_id, edit_name, edit_value, edit_type, edit_symbol, edit_description)
+                    st.session_state.editing_asset_id = None
+                    st.session_state.heir_content_cache = {}
+                    st.success(f"✅ Updated {edit_name}!")
+                    st.rerun()
+                elif cancel_edit:
+                    st.session_state.editing_asset_id = None
+                    st.rerun()
+        
+        st.markdown("---")
     
     st.markdown("---")
     
@@ -206,7 +336,8 @@ def heir_view():
     st.markdown("*Discover the investments your family has built for generations. Tap to learn more!*")
     
     # Portfolio Value Teaser
-    total_value = get_total_portfolio_value()
+    portfolio = st.session_state.portfolio
+    total_value = get_total_portfolio_value(portfolio)
     st.info(f"💎 **Total Family Portfolio:** {format_currency(total_value)}")
     
     st.markdown("---")
@@ -214,7 +345,7 @@ def heir_view():
     # Display Legacy Cards
     heir_profile = USERS['heir']
     
-    for i, asset in enumerate(PORTFOLIO[:5]):  # Show top 5 assets
+    for i, asset in enumerate(portfolio[:5]):  # Show top 5 assets
         asset_name = asset['name']
         
         # Check cache for AI content

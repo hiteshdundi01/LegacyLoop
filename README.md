@@ -16,9 +16,11 @@ LegacyLoop is an AI-powered prototype that connects wealthy families, their heir
 ## ✨ Features
 
 ### 👴 Primary Client View (Patriarch/Matriarch)
+- **Portfolio Management** — Add, edit, and delete assets with full CRUD functionality
+- **8 Asset Types** — Equities, Index Funds, Bonds, Real Estate, Crypto, Private Equity, and more
 - **Family Mission Builder** — Define core values and wealth vision
 - **AI-Generated Constitution** — Gemini drafts formal yet warm legacy statements
-- **Portfolio Overview** — At-a-glance view of family holdings
+- **Portfolio Overview** — At-a-glance view of family holdings with real-time totals
 
 ### 👦 Heir View (Next Generation)
 - **TikTok-Style Legacy Cards** — Swipeable assets with gamified explanations
@@ -54,6 +56,7 @@ flowchart TB
     end
     
     subgraph State["💾 Session State"]
+        Portfolio[Portfolio Assets]
         Mission[Mission Statement]
         Logs[Engagement Logs]
         Cache[Content Cache]
@@ -140,7 +143,7 @@ Open [http://localhost:8501](http://localhost:8501) in your browser.
 ```
 LegacyLoop/
 ├── app.py                 # Main Streamlit application
-├── data.py                # Mock portfolio & user data
+├── data.py                # Portfolio data, asset CRUD operations
 ├── services.py            # Gemini AI integration layer
 ├── ui_components.py       # Reusable styled components
 ├── requirements.txt       # Python dependencies
